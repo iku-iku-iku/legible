@@ -1,0 +1,52 @@
+use std::str::FromStr;
+use compiler::ast;
+
+grammar;
+
+pub Block: Box<ast::Block> = {
+    <t:Title> => Box::new(ast::Block::new(t)),
+};
+
+pub Title: Box<ast::Title> = {
+    <x:hashes> <t:TitleContent> => Box::new(ast::Title::new(t, x)),
+    <x:hashes> => Box::new(ast::Title::new("", x)),
+};
+
+pub hashes: u32 = {
+    <a:hash> <b:hashes> => a + b,
+    <x:hash> => x,
+};
+
+hash: u32 = { "#" => 1 };
+
+TitleContent: &'input str = { <x:r"[ ][^\n]*"> => x.trim() };
+
+// pub Comment: Box<ast::Comment> = {
+//     <g:gt> <l:Line> => Box::new(ast::Comment::new(l)),
+// };
+
+// Line: &'input str = { <x:r"[^>][^\n]*"> => x };
+
+// pub OrderedList: Vec<Element> = {
+//     <x:OrderedListElement> <y:OrderedList> => {
+//         let mut v = y;
+//         v.push(x);
+//         v
+//     },
+//     <x:OrderedListElement> => vec![x],
+// };
+
+pub OrderedListElement: &'input str = {
+    <n:number> <d:dot> <q:QuotedItem> => q
+};
+
+QuotedItem: &'input str = {
+    <m:r"`.*`"> => &m[1..m.len()-1],
+};
+
+
+
+number: u32 = { <x:r"[0-9]+"> => u32::from_str(x).unwrap() };
+
+dot = { "." };
+quote = { "`" };
