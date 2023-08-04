@@ -1,25 +1,41 @@
 use std::str::FromStr;
 use compiler::ast;
+use compiler::lexer;
 
 grammar;
 
 pub Block: Box<ast::Block> = {
     <t:Title> => Box::new(ast::Block::new(t)),
+    // <t:Title> <i:InputArgs> => Box::new(ast::Block::new_with_inputs(t, i))
 };
 
 pub Title: Box<ast::Title> = {
-    <x:hashes> <t:TitleContent> => Box::new(ast::Title::new(t, x)),
-    <x:hashes> => Box::new(ast::Title::new("", x)),
+    <x:Hashes> <t:TitleName> => Box::new(
+        ast::Title::new(
+            if let lexer::Tok::TitleName(ref x) = t { &x } else { panic!("IMPOSSIBLE"); "" },
+            if let lexer::Tok::Hashes(x) = x { x } else { panic!("IMPOSSIBLE"); 0 }
+        )
+    ),
 };
 
-pub hashes: u32 = {
-    <a:hash> <b:hashes> => a + b,
-    <x:hash> => x,
-};
+// pub hashes: u32 = {
+//     <a:hash> <b:hashes> => a + b,
+//     <x:hash> => x,
+// };
 
-hash: u32 = { "#" => 1 };
+// hash: u32 = { "#" => 1 };
 
-TitleContent: &'input str = { <x:r"[ ][^\n]*"> => x.trim() };
+// TitleContent: &'input str = { 
+//     <x:TitleName> => {
+//         if let lexer::Tok::TitleName(x) = x {
+//             x.trim()
+//         } else {
+//             ""
+//         }
+//     }
+// };
+
+
 
 // pub Comment: Box<ast::Comment> = {
 //     <g:gt> <l:Line> => Box::new(ast::Comment::new(l)),
@@ -36,17 +52,116 @@ TitleContent: &'input str = { <x:r"[ ][^\n]*"> => x.trim() };
 //     <x:OrderedListElement> => vec![x],
 // };
 
-pub OrderedListElement: &'input str = {
-    <n:number> <d:dot> <q:QuotedItem> => q
+// pub InputArgs: Vec<Box<ast::InputArg>> = {
+//     <mut v:InputArgs> <x:InputArg> => {
+//         v.push(x);
+//         v
+//     },
+//     <x:InputArg> => vec![x],
+// };
+
+pub InputArg: Box<ast::InputArg> = {
+    <x:OrderedListElement> => Box::new(ast::InputArg::new(&x)),
 };
 
-QuotedItem: &'input str = {
-    <m:r"`.*`"> => &m[1..m.len()-1],
+pub OrderedListElement: String = {
+    <n:Number> <d:"."> <s:" "*> <v:Variable> => v
 };
 
+pub Template: (Vec<String>, Vec<(String, u32)>, u32) = {
+    <n:Name> => if let lexer::Tok::Name(n) = n {
+        (vec![n], vec![], 0)
+    } else {
+        (vec!["IMPOSSIBLE".to_string()], vec![], 0)
+    },
+    <mut t:Template> " " <n:Name> => {
+        t.2 += 1;
+        if let lexer::Tok::Name(n) = n {
+            t.0.push(n);
+        }
+        t
+    },
+    <mut t:Template> " " <v:Variable> => {
+        t.2 += 1;
+        t.1.push((v, t.2));
+        t
+    },
+    <v:Variable> " " <n:Name> => {
+        if let lexer::Tok::Name(n) = n {
+            (vec![n], vec![(v, 0)], 1)
+        } else {
+            (vec!["IMPOSSIBLE".to_string()], vec![], 0)
+        }
+    }
+};
 
+Variable: String = {
+    <m:QuotedItem> => {
+        if let lexer::Tok::QuotedItem(m) = m {
+            let mut s = m;
+            s.remove(0);
+            s.pop();
+            s
+        } else {
+            "IMPOSSIBLE".to_string()
+        }
+    }
+}
 
-number: u32 = { <x:r"[0-9]+"> => u32::from_str(x).unwrap() };
+// number: u32 = {
+//     <x:Number> => {
+//         if let lexer::Tok::Number(x) = x {
+//             x as u32
+//         } else {
+//             panic!("not a number")
+//         }
+//     }
+// };
 
-dot = { "." };
-quote = { "`" };
+// Tier<Op, NextTier>: Box<ast::Expr> = {
+//     Tier<Op, NextTier> Op NextTier => Box::new(ast::Expr::Compound(<>)),
+//     NextTier,
+// };
+
+// pub Expr = Tier<ExprOp, Factor>;
+
+// Factor = Tier<FactorOp, Term>;
+
+// ExprOp: ast::Operator = {
+//     "+" => ast::Operator::Add,
+//     "-" => ast::Operator::Sub,
+// };
+
+// FactorOp: ast::Operator = {
+//     "*" => ast::Operator::Mul,
+//     "/" => ast::Operator::Div,
+// };
+
+// pub Term: Box<ast::Expr> = {
+//     number => Box::new(ast::Expr::Number(<> as i32)),
+//     "(" <Expr> ")",
+// };
+
+extern {
+    type Location = usize;
+    type Error = lexer::LexicalError;
+    enum lexer::Tok {
+        " " => lexer::Tok::Space,
+        "\t" => lexer::Tok::Tab,
+        "\n" => lexer::Tok::Linefeed,
+        "#" => lexer::Tok::Hash,
+        "`" => lexer::Tok::Backtick,
+        "." => lexer::Tok::Dot,
+        "+" => lexer::Tok::Plus,
+        "-" => lexer::Tok::Minus,
+        "*" => lexer::Tok::Star,
+        "/" => lexer::Tok::Slash,
+        "(" => lexer::Tok::LParen,
+        ")" => lexer::Tok::RParen,
+        TitleName => lexer::Tok::TitleName(_),
+        QuotedItem => lexer::Tok::QuotedItem(_),
+        Number => lexer::Tok::Number(_),
+        Hashes => lexer::Tok::Hashes(_),
+        Name => lexer::Tok::Name(_),
+    }
+}
